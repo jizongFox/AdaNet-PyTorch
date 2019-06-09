@@ -1,0 +1,18 @@
+Arch:
+  name: largeconvnet
+  input_dim: 1
+  num_classes: 10
+  stochastic: false
+
+Optim:
+  name: Adam
+  lr: 0.001
+
+DataLoader:
+  batch_size: 100
+  num_workers: 8
+  shuffle: True
+  drop_last: True
+
+Trainer:
+  device: cuda

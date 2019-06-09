@@ -1,6 +1,7 @@
 #   Networks adapted from https://github.com/qinenergy/adanet/blob/master/convlarge/cnn.py
 import torch
 from torch import nn
+from torch.nn import functional as F
 
 
 def conv_block(input_dim, out_dim, kernel_size=3, stride=1, padding=1, lrelu_slope=0.01):
@@ -42,7 +43,7 @@ class LargeConvNet(nn.Module):
         self.AveragePooling = nn.AdaptiveAvgPool2d((1, 1))
         self.fc = nn.Linear(128, num_classes)
 
-        dropout = nn.Dropout2d() if stochastic else identical
+        dropout = nn.Dropout2d() if stochastic else identical()
 
         self.bottleneck = nn.Sequential(
             nn.MaxPool2d(kernel_size=2, stride=2),
@@ -69,6 +70,19 @@ class LargeConvNet(nn.Module):
         if self.top_bn:
             out = nn.BatchNorm1d(10)(out)
         return out
+
+
+class SimpleNet(nn.Module):
+
+    def __init__(self, in_channel, num_classes):
+        super().__init__()
+        self.fc1 = nn.Linear(in_features=in_channel, out_features=10)
+        self.fc2 = nn.Linear(10, num_classes)
+
+    def forward(self, input):
+        out = self.fc1(input)
+        out = F.relu(out, inplace=True)
+        return self.fc2(out)
 
 
 if __name__ == '__main__':
