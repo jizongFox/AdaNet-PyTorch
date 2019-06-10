@@ -12,8 +12,9 @@ from deepclustering.loss import KL_div
 from deepclustering.meters import MeterInterface, AverageValueMeter, ConfusionMatrix
 from deepclustering.model import Model
 from deepclustering.trainer import _Trainer
-from deepclustering.utils import DataIter, tqdm, tqdm_, class2one_hot, flatten_dict, nice_dict
+from deepclustering.utils import DataIter, tqdm, tqdm_, class2one_hot, flatten_dict, nice_dict, simplex
 from torch import nn
+from torch.nn import functional as F
 from torch.utils.data import DataLoader
 
 PROJECT_PATH = str(Path(__file__).parent)
@@ -33,6 +34,7 @@ class AdaNetTrainer(_Trainer):
                  checkpoint_path: str = None,
                  device='cpu',
                  config: dict = None,
+                 discriminator: Model = None,
                  **kwargs) -> None:
         super().__init__(model, None, val_loader, max_epoch, save_dir, checkpoint_path, device, config,
                          **kwargs)
@@ -41,6 +43,8 @@ class AdaNetTrainer(_Trainer):
         self.ce_criterion = nn.CrossEntropyLoss()
         self.kl_criterion = KL_div()
         self.weight = weight
+        self.discriminator = discriminator
+        self.discriminator.to(self.device)
 
     def __init_meters__(self) -> List[str]:
         METER_CONFIG = {'tra_sup': AverageValueMeter(),
@@ -95,7 +99,7 @@ class AdaNetTrainer(_Trainer):
             label_img, label_gt, unlabel_img = label_img.to(self.device), \
                                                label_gt.to(self.device), unlabel_img.to(self.device)
 
-            label_pred = self.model(label_img)
+            label_pred, _ = self.model(label_img)
             self.METERINTERFACE.tra_acc.add(label_pred.max(1)[1], label_gt)
             sup_loss = self.ce_criterion(label_pred, label_gt)
             self.METERINTERFACE.tra_sup.add(sup_loss.item())
@@ -139,10 +143,18 @@ class AdaNetTrainer(_Trainer):
         super(AdaNetTrainer, self)._trainer_specific_loss(*args, **kwargs)  # warning
         assert label_img.shape == unlab_img.shape, f"Shapes of lableled and unlabeled images should be the same," \
             f"given {label_img.shape} and {unlab_img.shape}."
-        pseudo_label = self.model(unlab_img, logit=False).detach()
-        mixup_img, mixup_label, mix_indice = self._mixup(label_img, label_gt, unlab_img, pseudo_label)
-        reg_loss1 = self.kl_criterion(self.model(mixup_img, logit=False), mixup_label)
-        return reg_loss1
+        pseudo_label = self.model(unlab_img)[0].detach()
+        mixup_img, mixup_label, mix_indice = self._mixup(label_img, label_gt, unlab_img, F.softmax(pseudo_label, 1))
+
+        pred_logit, feature = self.model(mixup_img)
+        discri_pred = self.discriminator(feature)
+
+        reg_loss1 = self.kl_criterion(F.softmax(pred_logit, 1), mixup_label)
+        adv_loss = self.kl_criterion(F.softmax(discri_pred, 1), mix_indice)
+
+        # Discriminator
+
+        return reg_loss1 - adv_loss
 
     def _mixup(self, label_img, label_gt, unlab_img, pseudo_label):
         bn, *shape = label_img.shape
@@ -153,9 +165,11 @@ class AdaNetTrainer(_Trainer):
         mixup_label = class2one_hot(label_gt.unsqueeze(dim=1).unsqueeze(2),
                                     C=self.model.arch_dict['num_classes']).squeeze().float() * alpha.view(bn, 1) \
                       + pseudo_label * (1 - alpha).view(bn, 1)
-        mixup_index = 1 - alpha
+        mixup_index = torch.stack([alpha, 1 - alpha], dim=1).to(self.device)
 
         assert mixup_img.shape == label_img.shape
         assert mixup_label.shape == pseudo_label.shape
-        assert mixup_index.shape == label_gt.shape
+        assert mixup_index.shape[0] == bn
+        assert simplex(mixup_index)
+
         return mixup_img, mixup_label, mixup_index

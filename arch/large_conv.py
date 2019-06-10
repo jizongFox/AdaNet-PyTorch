@@ -64,12 +64,38 @@ class LargeConvNet(nn.Module):
         out = self.block7(out)
         out = self.block8(out)
         out = self.block9(out)
-        out = self.AveragePooling(out)
+        feature = self.AveragePooling(out)
 
-        out = self.fc(out.view(out.shape[0], -1))
+        out = self.fc(feature.view(feature.shape[0], -1))
         if self.top_bn:
             out = nn.BatchNorm1d(10)(out)
+        return out, feature.view(feature.shape[0], -1)
+
+
+class Discriminator(nn.Module):
+
+    def __init__(self, input_dim, num_classes):
+        super().__init__()
+        self.fc1 = nn.Linear(input_dim, 1024)
+        self.fc2 = nn.Linear(1024, 1024)
+        self.fc3 = nn.Linear(1024, num_classes)
+
+    def forward(self, input):
+        out = F.relu(self.fc1(input), inplace=True)
+        out = F.relu(self.fc2(out), inplace=True)
+        out = self.fc3(out)
         return out
+
+
+# class GradReverse(Function):
+#     def forward(self, x):
+#         return x
+#
+#     def backward(self, grad_output):
+#         return (-grad_output)
+
+# def grad_reverse(x):
+#     return GradReverse()(x)
 
 
 class SimpleNet(nn.Module):

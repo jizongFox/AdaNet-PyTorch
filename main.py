@@ -9,13 +9,13 @@ from deepclustering.dataset.classification import Cifar10SemiSupervisedDatasetIn
 from deepclustering.manager import ConfigManger
 from deepclustering.model import Model
 from arch import _register_arch
-
 from trainer import AdaNetTrainer
 
 DEFAULT_CONFIG_PATH = 'config.yaml'
 config = ConfigManger(DEFAULT_CONFIG_PATH, verbose=True, integrality_check=False).merged_config
 pprint(config)
 model = Model(config.get('Arch'), config.get('Optim'), config.get('Scheduler'))
+discriminator = Model(config.get('Dis'), config.get('Optim'), config.get('Scheduler'))
 # print(model)
 SemiDatasetHandler = Cifar10SemiSupervisedDatasetInterface(
     data_root='/home/jizong/Workspace/deep-clustering-toolbox/.data',
@@ -31,6 +31,7 @@ trainer = AdaNetTrainer(
     unlabeled_loader=unlabel_loader,
     val_loader=val_loader,
     config=config,
+    discriminator=discriminator,
     **config['Trainer']
 )
 trainer.start_training()
