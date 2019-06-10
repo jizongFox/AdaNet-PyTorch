@@ -4,11 +4,6 @@ Arch:
   num_classes: 10
   stochastic: false
 
-Dis:
-  name: discriminator
-  input_dim: 128
-  num_classes: 2
-
 Optim:
   name: Adam
   lr: 0.001
@@ -21,4 +16,5 @@ DataLoader:
 
 Trainer:
   device: cuda
+  save_dir: first_try
 

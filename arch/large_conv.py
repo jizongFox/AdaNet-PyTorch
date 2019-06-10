@@ -1,6 +1,7 @@
 #   Networks adapted from https://github.com/qinenergy/adanet/blob/master/convlarge/cnn.py
 import torch
 from torch import nn
+from torch.autograd import Function
 from torch.nn import functional as F
 
 
@@ -22,6 +23,14 @@ class identical(nn.Module):
 
     def forward(self, input):
         return input
+
+
+class GradReverse(Function):
+    def forward(self, x):
+        return x
+
+    def backward(self, grad_output):
+        return -grad_output
 
 
 class LargeConvNet(nn.Module):
@@ -49,6 +58,14 @@ class LargeConvNet(nn.Module):
             nn.MaxPool2d(kernel_size=2, stride=2),
             dropout
         )
+        self.discriminator = nn.Sequential(
+            nn.Linear(128, 1024),
+            nn.ReLU(inplace=True),
+            nn.Linear(1024, 1024),
+            nn.ReLU(inplace=True),
+            nn.Linear(1024, 2),
+            nn.Softmax(dim=1)
+        )
 
     def forward(self, input):
         out = self.block1(input)
@@ -66,36 +83,31 @@ class LargeConvNet(nn.Module):
         out = self.block9(out)
         feature = self.AveragePooling(out)
 
+        # classification branch
         out = self.fc(feature.view(feature.shape[0], -1))
         if self.top_bn:
             out = nn.BatchNorm1d(10)(out)
-        return out, feature.view(feature.shape[0], -1)
+        out = F.softmax(out, 1)
+
+        # domain adaptition branch
+        cls = self.discriminator(GradReverse()(feature.view(feature.shape[0], -1)))
+
+        return out, cls
 
 
-class Discriminator(nn.Module):
-
-    def __init__(self, input_dim, num_classes):
-        super().__init__()
-        self.fc1 = nn.Linear(input_dim, 1024)
-        self.fc2 = nn.Linear(1024, 1024)
-        self.fc3 = nn.Linear(1024, num_classes)
-
-    def forward(self, input):
-        out = F.relu(self.fc1(input), inplace=True)
-        out = F.relu(self.fc2(out), inplace=True)
-        out = self.fc3(out)
-        return out
-
-
-# class GradReverse(Function):
-#     def forward(self, x):
-#         return x
+# class Discriminator(nn.Module):
 #
-#     def backward(self, grad_output):
-#         return (-grad_output)
-
-# def grad_reverse(x):
-#     return GradReverse()(x)
+#     def __init__(self, input_dim, num_classes):
+#         super().__init__()
+#         self.fc1 = nn.Linear(input_dim, 1024)
+#         self.fc2 = nn.Linear(1024, 1024)
+#         self.fc3 = nn.Linear(1024, num_classes)
+#
+#     def forward(self, input):
+#         out = F.relu(self.fc1(input), inplace=True)
+#         out = F.relu(self.fc2(out), inplace=True)
+#         out = self.fc3(out)
+#         return out
 
 
 class SimpleNet(nn.Module):

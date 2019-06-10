@@ -14,7 +14,6 @@ from deepclustering.model import Model
 from deepclustering.trainer import _Trainer
 from deepclustering.utils import DataIter, tqdm, tqdm_, class2one_hot, flatten_dict, nice_dict, simplex
 from torch import nn
-from torch.nn import functional as F
 from torch.utils.data import DataLoader
 
 PROJECT_PATH = str(Path(__file__).parent)
@@ -34,7 +33,6 @@ class AdaNetTrainer(_Trainer):
                  checkpoint_path: str = None,
                  device='cpu',
                  config: dict = None,
-                 discriminator: Model = None,
                  **kwargs) -> None:
         super().__init__(model, None, val_loader, max_epoch, save_dir, checkpoint_path, device, config,
                          **kwargs)
@@ -43,8 +41,6 @@ class AdaNetTrainer(_Trainer):
         self.ce_criterion = nn.CrossEntropyLoss()
         self.kl_criterion = KL_div()
         self.weight = weight
-        self.discriminator = discriminator
-        self.discriminator.to(self.device)
 
     def __init_meters__(self) -> List[str]:
         METER_CONFIG = {'tra_sup': AverageValueMeter(),
@@ -120,7 +116,7 @@ class AdaNetTrainer(_Trainer):
 
         for _batch_num, (img, label) in enumerate(val_loader_):
             img, label = img.to(self.device), label.to(self.device)
-            pred = self.model(img, logit=False)
+            pred, _ = self.model(img)
             self.METERINTERFACE.val_conf.add(pred.max(1)[1], label)
             report_dict = self._eval_report_dict
             val_loader_.set_postfix(report_dict)
@@ -144,17 +140,16 @@ class AdaNetTrainer(_Trainer):
         assert label_img.shape == unlab_img.shape, f"Shapes of lableled and unlabeled images should be the same," \
             f"given {label_img.shape} and {unlab_img.shape}."
         pseudo_label = self.model(unlab_img)[0].detach()
-        mixup_img, mixup_label, mix_indice = self._mixup(label_img, label_gt, unlab_img, F.softmax(pseudo_label, 1))
+        mixup_img, mixup_label, mix_indice = self._mixup(label_img, label_gt, unlab_img, pseudo_label)
 
-        pred_logit, feature = self.model(mixup_img)
-        discri_pred = self.discriminator(feature)
-
-        reg_loss1 = self.kl_criterion(F.softmax(pred_logit, 1), mixup_label)
-        adv_loss = self.kl_criterion(F.softmax(discri_pred, 1), mix_indice)
+        pred, cls = self.model(mixup_img)
+        assert simplex(pred) and simplex(cls)
+        reg_loss1 = self.kl_criterion(pred, mixup_label)
+        adv_loss = self.kl_criterion(cls, mix_indice)
 
         # Discriminator
 
-        return reg_loss1 - adv_loss
+        return reg_loss1 + adv_loss
 
     def _mixup(self, label_img, label_gt, unlab_img, pseudo_label):
         bn, *shape = label_img.shape

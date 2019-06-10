@@ -15,11 +15,10 @@ DEFAULT_CONFIG_PATH = 'config.yaml'
 config = ConfigManger(DEFAULT_CONFIG_PATH, verbose=True, integrality_check=False).merged_config
 pprint(config)
 model = Model(config.get('Arch'), config.get('Optim'), config.get('Scheduler'))
-discriminator = Model(config.get('Dis'), config.get('Optim'), config.get('Scheduler'))
 # print(model)
 SemiDatasetHandler = Cifar10SemiSupervisedDatasetInterface(
     data_root='/home/jizong/Workspace/deep-clustering-toolbox/.data',
-    labeled_sample_num=1000,
+    labeled_sample_num=4000,
     img_transformation=default_cifar10_img_transform['tf1'],
     target_transformation=None,
     verbose=True
@@ -31,7 +30,6 @@ trainer = AdaNetTrainer(
     unlabeled_loader=unlabel_loader,
     val_loader=val_loader,
     config=config,
-    discriminator=discriminator,
     **config['Trainer']
 )
 trainer.start_training()
