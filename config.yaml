@@ -17,4 +17,5 @@ DataLoader:
 Trainer:
   device: cuda
   save_dir: first_try
+  weight: 1.0
 

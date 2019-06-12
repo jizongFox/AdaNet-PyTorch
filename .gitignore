@@ -3,3 +3,5 @@ __pycache__/
 arch/__pycache__/
 runs/
 /data/cifar10ss/
+/.pytest_cache/
+/.pytype/

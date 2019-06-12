@@ -14,7 +14,7 @@ from arch import _register_arch
 from data.cifar_dataloader import Cifar10SemiSupervisedDatasetInterface
 from trainer import VAT_Trainer
 
-_ = _register_arch # to enable the registration
+_ = _register_arch  # to enable the registration
 DEFAULT_CONFIG_PATH = 'config.yaml'
 config = ConfigManger(DEFAULT_CONFIG_PATH, verbose=True, integrality_check=False).merged_config
 pprint(config)

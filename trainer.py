@@ -176,7 +176,7 @@ class AdaNetTrainer(_Trainer):
 class VAT_Trainer(AdaNetTrainer):
 
     def __init__(self, model: Model, labeled_loader: DataLoader, unlabeled_loader: DataLoader, val_loader: DataLoader,
-                 max_epoch: int = 100, weight: float = 0.01, use_entropy: bool = True, save_dir: str = 'vat',
+                 max_epoch: int = 100, weight: float = 1, use_entropy: bool = True, save_dir: str = 'vat',
                  checkpoint_path: str = None,
                  device='cpu', config: dict = None, **kwargs) -> None:
         super().__init__(model, labeled_loader, unlabeled_loader, val_loader, max_epoch, weight, save_dir,
