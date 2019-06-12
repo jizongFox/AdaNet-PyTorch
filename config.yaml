@@ -15,6 +15,7 @@ DataLoader:
   drop_last: True
 
 Trainer:
+  name: vat
   device: cuda
   save_dir: first_try
   max_epoch: 100

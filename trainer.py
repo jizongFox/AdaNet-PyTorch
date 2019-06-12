@@ -13,7 +13,7 @@ from deepclustering.loss import KL_div
 from deepclustering.meters import MeterInterface, AverageValueMeter, ConfusionMatrix
 from deepclustering.model import Model
 from deepclustering.trainer import _Trainer
-from deepclustering.utils import DataIter, tqdm, tqdm_, class2one_hot, flatten_dict, nice_dict, simplex
+from deepclustering.utils import DataIter, tqdm, tqdm_, class2one_hot, flatten_dict, nice_dict, simplex, dict_filter
 from torch.distributions import Beta
 from torch.utils.data import DataLoader
 
@@ -63,6 +63,17 @@ class AdaNetTrainer(_Trainer):
             'tra_conf_acc',
             'val_conf_acc'
         ]
+
+    @property
+    def _training_report_dict(self):
+        return {'tra_sup_l': self.METERINTERFACE.tra_sup_label.summary()['mean'],
+                'tra_sup_m': self.METERINTERFACE.tra_sup_mixup.summary()['mean'],
+                'tra_cls': self.METERINTERFACE.tra_cls.summary()['mean'],
+                'tra_acc': self.METERINTERFACE.tra_conf.summary()['acc']}
+
+    @property
+    def _eval_report_dict(self):
+        return flatten_dict({'val': self.METERINTERFACE.val_conf.summary()}, sep='_')
 
     def start_training(self):
         for epoch in range(self._start_epoch, self.max_epoch):
@@ -119,7 +130,7 @@ class AdaNetTrainer(_Trainer):
             self.model.step()
             report_dict = self._training_report_dict
             batch_num.set_postfix(report_dict)
-        print(f'Validating epoch {epoch}: {nice_dict(report_dict)}')
+        print(f'  Training epoch {epoch}: {nice_dict(report_dict)}')
 
     def _eval_loop(self, val_loader: DataLoader = None, epoch: int = 0, mode=ModelMode.EVAL, *args, **kwargs) -> float:
         self.model.set_mode(mode)
@@ -136,17 +147,6 @@ class AdaNetTrainer(_Trainer):
         print(f'Validating epoch {epoch}: {nice_dict(report_dict)}')
 
         return self.METERINTERFACE.val_conf.summary()['acc']
-
-    @property
-    def _training_report_dict(self):
-        return {'tra_sup_l': self.METERINTERFACE.tra_sup_label.summary()['mean'],
-                'tra_sup_m': self.METERINTERFACE.tra_sup_mixup.summary()['mean'],
-                'tra_cls': self.METERINTERFACE.tra_cls.summary()['mean'],
-                'tra_acc': self.METERINTERFACE.tra_conf.summary()['acc']}
-
-    @property
-    def _eval_report_dict(self):
-        return flatten_dict({'val': self.METERINTERFACE.val_conf.summary()}, sep='_')
 
     def _trainer_specific_loss(self, label_img, label_gt, unlab_img, *args, **kwargs):
         super(AdaNetTrainer, self)._trainer_specific_loss(*args, **kwargs)  # warning
@@ -190,17 +190,44 @@ class AdaNetTrainer(_Trainer):
 class VAT_Trainer(AdaNetTrainer):
 
     def __init__(self, model: Model, labeled_loader: DataLoader, unlabeled_loader: DataLoader, val_loader: DataLoader,
-                 max_epoch: int = 100, weight: float = 1, use_entropy: bool = True, save_dir: str = 'vat',
+                 max_epoch: int = 100, grl_scheduler=None, use_entropy: bool = True, save_dir: str = 'vat',
                  checkpoint_path: str = None,
                  device='cpu', config: dict = None, **kwargs) -> None:
-        super().__init__(model, labeled_loader, unlabeled_loader, val_loader, max_epoch, weight, save_dir,
+        super().__init__(model, labeled_loader, unlabeled_loader, val_loader, max_epoch, grl_scheduler, save_dir,
                          checkpoint_path, device, config, **kwargs)
         self.use_entropy = use_entropy
 
+    def __init_meters__(self) -> List[str]:
+        METER_CONFIG = {'tra_reg_total': AverageValueMeter(),
+                        'tra_sup_label': AverageValueMeter(),
+                        'tra_adv': AverageValueMeter(),
+                        'tra_entropy': AverageValueMeter(),
+                        'tra_conf': ConfusionMatrix(num_classes=10),
+                        'val_conf': ConfusionMatrix(num_classes=10)}
+        self.METERINTERFACE = MeterInterface(METER_CONFIG)
+        return [
+            'tra_reg_total_mean',
+            'tra_sup_label_mean',
+            'tra_adv_mean',
+            'tra_entropy_mean',
+            'tra_conf_acc',
+            'val_conf_acc'
+        ]
+
+    @property
+    def _training_report_dict(self):
+        return dict_filter({'tra_sup_l': self.METERINTERFACE.tra_sup_label.summary()['mean'],
+                            'tra_adv': self.METERINTERFACE.tra_adv.summary()['mean'],
+                            'tra_ent': self.METERINTERFACE.tra_entropy.summary()['mean'],
+                            'tra_acc': self.METERINTERFACE.tra_conf.summary()['acc']})
+
     def _trainer_specific_loss(self, label_img, label_gt, unlab_img, *args, **kwargs):
-        adversarial_loss, *_ = VATLoss(xi=1, eps=10.0, prop_eps=1)(self.model.torchnet, unlab_img)
+        adversarial_loss, *_ = VATLoss(xi=1e-6, eps=10.0, prop_eps=1)(self.model.torchnet, unlab_img)
         entropy = 0
+        self.METERINTERFACE.tra_adv.add(adversarial_loss.item())
         if self.use_entropy:
             unlabled_predicts, *_ = self.model(unlab_img)
             entropy = Entropy(reduce=True)(unlabled_predicts)
+            self.METERINTERFACE.tra_entropy.add(entropy.item())
+
         return entropy + adversarial_loss

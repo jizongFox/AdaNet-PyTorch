@@ -12,7 +12,7 @@ from deepclustering.model import Model
 from arch import _register_arch
 from data.cifar_dataloader import Cifar10SemiSupervisedDatasetInterface
 from scheduler import CustomScheduler
-from trainer import AdaNetTrainer
+from trainer import AdaNetTrainer, VAT_Trainer
 
 _ = _register_arch  # to enable the registration
 DEFAULT_CONFIG_PATH = 'config.yaml'
@@ -35,7 +35,10 @@ SemiDatasetHandler = Cifar10SemiSupervisedDatasetInterface(
 label_loader, unlabel_loader, val_loader = SemiDatasetHandler.SemiSupervisedDataLoaders(**config.get('DataLoader'))
 val_loader.dataset.img_transform: Compose = val_img_transform
 scheduler = CustomScheduler(max_epoch=config['Trainer']['max_epoch'])
-trainer = AdaNetTrainer(
+assert config['Trainer'].get('name') in ('vat', 'ada')
+
+Trainer = VAT_Trainer if config['Trainer']['name'] == 'vat' else AdaNetTrainer
+trainer = Trainer(
     model=model,
     labeled_loader=label_loader,
     unlabeled_loader=unlabel_loader,
