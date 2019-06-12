@@ -5,3 +5,4 @@ runs/
 /data/cifar10ss/
 /.pytest_cache/
 /.pytype/
+/data/MNIST/

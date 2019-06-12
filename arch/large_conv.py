@@ -27,16 +27,21 @@ class identical(nn.Module):
 
 
 class GradReverse(Function):
+    def __init__(self, lambd):
+        assert lambd >= 0
+        self.lambd = lambd
+
     def forward(self, x):
-        return x
+        return x.view_as(x)
 
     def backward(self, grad_output):
-        return -grad_output
+        return (grad_output * -self.lambd)
 
 
 class LargeConvNet(nn.Module):
-    def __init__(self, input_dim=3, num_classes=10, stochastic=True, top_bn=False):
+    def __init__(self, input_dim=3, num_classes=10, stochastic=True, top_bn=False, lambd=0.0):
         super().__init__()
+        self.lambd = float(lambd)
         self.top_bn = top_bn
         self.block1 = conv_block(input_dim, 128, 3, 1, padding=1, lrelu_slope=0.1)
         self.block2 = conv_block(128, 128, 3, 1, 1, 0.1)
@@ -92,7 +97,7 @@ class LargeConvNet(nn.Module):
         out = F.softmax(out, 1)
 
         # domain adaptation branch
-        cls = self.discriminator(GradReverse()(feature))
+        cls = self.discriminator(GradReverse(self.lambd)(feature))
 
         return out, cls
 

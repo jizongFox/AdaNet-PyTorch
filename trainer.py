@@ -14,9 +14,10 @@ from deepclustering.meters import MeterInterface, AverageValueMeter, ConfusionMa
 from deepclustering.model import Model
 from deepclustering.trainer import _Trainer
 from deepclustering.utils import DataIter, tqdm, tqdm_, class2one_hot, flatten_dict, nice_dict, simplex
-from torch import nn
+from torch.distributions import Beta
 from torch.utils.data import DataLoader
 
+from scheduler import CustomScheduler
 from utils import VATLoss
 
 PROJECT_PATH = str(Path(__file__).parent)
@@ -31,7 +32,7 @@ class AdaNetTrainer(_Trainer):
                  unlabeled_loader: DataLoader,
                  val_loader: DataLoader,
                  max_epoch: int = 100,
-                 weight: float = 0.01,
+                 grl_scheduler: CustomScheduler = None,
                  save_dir: str = 'adanet',
                  checkpoint_path: str = None,
                  device='cpu',
@@ -41,20 +42,25 @@ class AdaNetTrainer(_Trainer):
                          **kwargs)
         self.labeled_loader = labeled_loader
         self.unlabeled_loader = unlabeled_loader
-        self.ce_criterion = nn.CrossEntropyLoss()
         self.kl_criterion = KL_div()
-        self.weight = weight
+        self.beta_distr: Beta = Beta(torch.tensor([1.0]), torch.tensor([1.0]))
+        self.grl_scheduler = grl_scheduler
+        self.grl_scheduler.epoch = self._start_epoch
 
     def __init_meters__(self) -> List[str]:
-        METER_CONFIG = {'tra_sup': AverageValueMeter(),
-                        'tra_reg': AverageValueMeter(),
-                        'tra_acc': ConfusionMatrix(num_classes=10),
+        METER_CONFIG = {'tra_reg_total': AverageValueMeter(),
+                        'tra_sup_label': AverageValueMeter(),
+                        'tra_sup_mixup': AverageValueMeter(),
+                        'tra_cls': AverageValueMeter(),
+                        'tra_conf': ConfusionMatrix(num_classes=10),
                         'val_conf': ConfusionMatrix(num_classes=10)}
         self.METERINTERFACE = MeterInterface(METER_CONFIG)
         return [
-            'tra_sup_mean',
-            'tra_reg_mean',
-            'tra_acc_acc',
+            'tra_reg_total_mean',
+            'tra_sup_label_mean',
+            'tra_sup_mixup_mean',
+            'tra_cls_mean',
+            'tra_conf_acc',
             'val_conf_acc'
         ]
 
@@ -69,12 +75,14 @@ class AdaNetTrainer(_Trainer):
                 current_score = self._eval_loop(self.val_loader, epoch)
             self.METERINTERFACE.step()
             self.model.schedulerStep()
+            self.grl_scheduler.step()
             # save meters and checkpoints
             for k, v in self.METERINTERFACE.aggregated_meter_dict.items():
                 v.summary().to_csv(self.save_dir / f'meters/{k}.csv')
             self.METERINTERFACE.summary().to_csv(self.save_dir / self.wholemeter_filename)
             self.writer.add_scalars('Scalars', self.METERINTERFACE.summary().iloc[-1].to_dict(), global_step=epoch)
             self.drawer.call_draw()
+            self.model.torchnet.lambd = self.grl_scheduler.value
             self.save_checkpoint(self.state_dict, epoch, current_score)
 
     def _train_loop(
@@ -99,14 +107,15 @@ class AdaNetTrainer(_Trainer):
                                                label_gt.to(self.device), unlabel_img.to(self.device)
 
             label_pred, _ = self.model(label_img)
-            self.METERINTERFACE.tra_acc.add(label_pred.max(1)[1], label_gt)
-            sup_loss = self.ce_criterion(label_pred, label_gt)
-            self.METERINTERFACE.tra_sup.add(sup_loss.item())
+            self.METERINTERFACE.tra_conf.add(label_pred.max(1)[1], label_gt)
+            sup_loss = self.kl_criterion(label_pred,
+                                         class2one_hot(label_gt.unsqueeze(1).unsqueeze(1), 10).squeeze().float())
+            self.METERINTERFACE.tra_sup_label.add(sup_loss.item())
 
             reg_loss = self._trainer_specific_loss(label_img, label_gt, unlabel_img)
-            self.METERINTERFACE.tra_reg.add(reg_loss.item())
+            self.METERINTERFACE.tra_reg_total.add(reg_loss.item())
             self.model.zero_grad()
-            (sup_loss + self.weight * reg_loss).backward()
+            (sup_loss + reg_loss).backward()
             self.model.step()
             report_dict = self._training_report_dict
             batch_num.set_postfix(report_dict)
@@ -130,9 +139,10 @@ class AdaNetTrainer(_Trainer):
 
     @property
     def _training_report_dict(self):
-        return {'tra_sup': self.METERINTERFACE.tra_sup.summary()['mean'],
-                'tra_reg': self.METERINTERFACE.tra_reg.summary()['mean'],
-                'tra_acc': self.METERINTERFACE.tra_acc.summary()['acc']}
+        return {'tra_sup_l': self.METERINTERFACE.tra_sup_label.summary()['mean'],
+                'tra_sup_m': self.METERINTERFACE.tra_sup_mixup.summary()['mean'],
+                'tra_cls': self.METERINTERFACE.tra_cls.summary()['mean'],
+                'tra_acc': self.METERINTERFACE.tra_conf.summary()['acc']}
 
     @property
     def _eval_report_dict(self):
@@ -142,25 +152,29 @@ class AdaNetTrainer(_Trainer):
         super(AdaNetTrainer, self)._trainer_specific_loss(*args, **kwargs)  # warning
         assert label_img.shape == unlab_img.shape, f"Shapes of labeled and unlabeled images should be the same," \
             f"given {label_img.shape} and {unlab_img.shape}."
-        pseudo_label = self.model(unlab_img)[0].detach()
+        self.model.eval()
+        with torch.no_grad():
+            pseudo_label = self.model.torchnet(unlab_img)[0]
+        self.model.train()
         mixup_img, mixup_label, mix_indice = self._mixup(label_img, label_gt, unlab_img, pseudo_label)
 
         pred, cls = self.model(mixup_img)
         assert simplex(pred) and simplex(cls)
         reg_loss1 = self.kl_criterion(pred, mixup_label)
         adv_loss = self.kl_criterion(cls, mix_indice)
+        self.METERINTERFACE.tra_sup_mixup.add(reg_loss1.item())
+        self.METERINTERFACE.tra_cls.add(adv_loss.item())
 
         # Discriminator
-
         return reg_loss1 + adv_loss
 
     def _mixup(self, label_img, label_gt, unlab_img, pseudo_label):
         bn, *shape = label_img.shape
-        alpha = torch.rand(bn).to(self.device)
+        alpha = self.beta_distr.sample((bn,)).squeeze(1).to(self.device)
         _alpha = alpha.view(bn, 1, 1, 1).repeat(1, *shape)
         assert _alpha.shape == label_img.shape
         mixup_img = label_img * _alpha + unlab_img * (1 - _alpha)
-        mixup_label = class2one_hot(label_gt.unsqueeze(dim=1).unsqueeze(2),
+        mixup_label = class2one_hot(label_gt.unsqueeze(dim=1).unsqueeze(dim=2),
                                     C=self.model.arch_dict['num_classes']).squeeze().float() * alpha.view(bn, 1) \
                       + pseudo_label * (1 - alpha).view(bn, 1)
         mixup_index = torch.stack([alpha, 1 - alpha], dim=1).to(self.device)
