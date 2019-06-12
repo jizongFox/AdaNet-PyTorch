@@ -9,4 +9,5 @@ Details would not perfectly matched.
 
 Acknowledgement:  
 [Original authors](https://arxiv.org/abs/1905.08171), [repo](https://github.com/qinenergy/adanet)   
-[Domain-Adversarial Training of Neural Networks](https://arxiv.org/pdf/1505.07818.pdf), [repo](https://github.com/ShichengChen/Domain-Adversarial-Training-of-Neural-Networks)
+[Domain-Adversarial Training of Neural Networks](https://arxiv.org/pdf/1505.07818.pdf), [repo](https://github.com/ShichengChen/Domain-Adversarial-Training-of-Neural-Networks)  
+[VAT Chainer code](https://github.com/takerum/vat_chainer)

@@ -8,6 +8,7 @@ from typing import List
 
 import torch
 from deepclustering import ModelMode
+from deepclustering.loss import Entropy
 from deepclustering.loss import KL_div
 from deepclustering.meters import MeterInterface, AverageValueMeter, ConfusionMatrix
 from deepclustering.model import Model
@@ -15,6 +16,8 @@ from deepclustering.trainer import _Trainer
 from deepclustering.utils import DataIter, tqdm, tqdm_, class2one_hot, flatten_dict, nice_dict, simplex
 from torch import nn
 from torch.utils.data import DataLoader
+
+from utils import VATLoss
 
 PROJECT_PATH = str(Path(__file__).parent)
 
@@ -29,7 +32,7 @@ class AdaNetTrainer(_Trainer):
                  val_loader: DataLoader,
                  max_epoch: int = 100,
                  weight: float = 0.01,
-                 save_dir: str = 'base',
+                 save_dir: str = 'adanet',
                  checkpoint_path: str = None,
                  device='cpu',
                  config: dict = None,
@@ -168,3 +171,22 @@ class AdaNetTrainer(_Trainer):
         assert simplex(mixup_index)
 
         return mixup_img, mixup_label, mixup_index
+
+
+class VAT_Trainer(AdaNetTrainer):
+
+    def __init__(self, model: Model, labeled_loader: DataLoader, unlabeled_loader: DataLoader, val_loader: DataLoader,
+                 max_epoch: int = 100, weight: float = 0.01, use_entropy: bool = True, save_dir: str = 'vat',
+                 checkpoint_path: str = None,
+                 device='cpu', config: dict = None, **kwargs) -> None:
+        super().__init__(model, labeled_loader, unlabeled_loader, val_loader, max_epoch, weight, save_dir,
+                         checkpoint_path, device, config, **kwargs)
+        self.use_entropy = use_entropy
+
+    def _trainer_specific_loss(self, label_img, label_gt, unlab_img, *args, **kwargs):
+        adversarial_loss, *_ = VATLoss(xi=1, eps=10.0, prop_eps=1)(self.model.torchnet, unlab_img)
+        entropy = 0
+        if self.use_entropy:
+            unlabled_predicts, *_ = self.model(unlab_img)
+            entropy = Entropy(reduce=True)(unlabled_predicts)
+        return entropy + adversarial_loss
