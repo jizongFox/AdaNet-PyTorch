@@ -12,7 +12,8 @@ def conv_block(input_dim, out_dim, kernel_size=3, stride=1, padding=1, lrelu_slo
             out_channels=out_dim,
             kernel_size=kernel_size,
             stride=stride,
-            padding=padding
+            padding=padding,
+            bias=False,
         ),
         nn.BatchNorm2d(out_dim),
         nn.LeakyReLU(inplace=True, negative_slope=lrelu_slope)
@@ -51,11 +52,11 @@ class LargeConvNet(nn.Module):
 
         self.AveragePooling = nn.AdaptiveAvgPool2d((1, 1))
         self.fc = nn.Linear(128, num_classes)
-
+        self.top_bn_layer = nn.BatchNorm1d(num_classes)
         dropout = nn.Dropout2d() if stochastic else identical()
 
         self.bottleneck = nn.Sequential(
-            nn.MaxPool2d(kernel_size=2, stride=2),
+            nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
             dropout
         )
         self.discriminator = nn.Sequential(
@@ -82,32 +83,18 @@ class LargeConvNet(nn.Module):
         out = self.block8(out)
         out = self.block9(out)
         feature = self.AveragePooling(out)
+        feature = feature.view(feature.shape[0], -1)
 
         # classification branch
-        out = self.fc(feature.view(feature.shape[0], -1))
+        out = self.fc(feature)
         if self.top_bn:
-            out = nn.BatchNorm1d(10)(out)
+            out = self.top_bn_layer(out)
         out = F.softmax(out, 1)
 
-        # domain adaptition branch
-        cls = self.discriminator(GradReverse()(feature.view(feature.shape[0], -1)))
+        # domain adaptation branch
+        cls = self.discriminator(GradReverse()(feature))
 
         return out, cls
-
-
-# class Discriminator(nn.Module):
-#
-#     def __init__(self, input_dim, num_classes):
-#         super().__init__()
-#         self.fc1 = nn.Linear(input_dim, 1024)
-#         self.fc2 = nn.Linear(1024, 1024)
-#         self.fc3 = nn.Linear(1024, num_classes)
-#
-#     def forward(self, input):
-#         out = F.relu(self.fc1(input), inplace=True)
-#         out = F.relu(self.fc2(out), inplace=True)
-#         out = self.fc3(out)
-#         return out
 
 
 class SimpleNet(nn.Module):

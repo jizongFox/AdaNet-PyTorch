@@ -1,6 +1,6 @@
 Arch:
   name: largeconvnet
-  input_dim: 1
+  input_dim: 3
   num_classes: 10
   stochastic: false
 

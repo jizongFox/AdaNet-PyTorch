@@ -137,7 +137,7 @@ class AdaNetTrainer(_Trainer):
 
     def _trainer_specific_loss(self, label_img, label_gt, unlab_img, *args, **kwargs):
         super(AdaNetTrainer, self)._trainer_specific_loss(*args, **kwargs)  # warning
-        assert label_img.shape == unlab_img.shape, f"Shapes of lableled and unlabeled images should be the same," \
+        assert label_img.shape == unlab_img.shape, f"Shapes of labeled and unlabeled images should be the same," \
             f"given {label_img.shape} and {unlab_img.shape}."
         pseudo_label = self.model(unlab_img)[0].detach()
         mixup_img, mixup_label, mix_indice = self._mixup(label_img, label_gt, unlab_img, pseudo_label)

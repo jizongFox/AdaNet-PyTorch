@@ -5,7 +5,8 @@
 #
 from pprint import pprint
 
-from deepclustering.dataset.classification import Cifar10SemiSupervisedDatasetInterface, default_cifar10_img_transform
+from data.cifar_dataloader import Cifar10SemiSupervisedDatasetInterface
+from deepclustering.augment.tensor_augment import RandomHorizontalFlip, RandomCrop, Compose
 from deepclustering.manager import ConfigManger
 from deepclustering.model import Model
 from arch import _register_arch
@@ -16,10 +17,13 @@ config = ConfigManger(DEFAULT_CONFIG_PATH, verbose=True, integrality_check=False
 pprint(config)
 model = Model(config.get('Arch'), config.get('Optim'), config.get('Scheduler'))
 # print(model)
+img_transform = Compose([
+    RandomHorizontalFlip(),
+    RandomCrop((28, 28))
+])
+
 SemiDatasetHandler = Cifar10SemiSupervisedDatasetInterface(
-    data_root='/home/jizong/Workspace/deep-clustering-toolbox/.data',
-    labeled_sample_num=4000,
-    img_transformation=default_cifar10_img_transform['tf1'],
+    img_transformation=img_transform,
     target_transformation=None,
     verbose=True
 )
