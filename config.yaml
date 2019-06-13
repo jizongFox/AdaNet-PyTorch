@@ -9,14 +9,17 @@ Optim:
   lr: 0.001
 
 DataLoader:
-  batch_size: 100
-  num_workers: 8
+  name: svhn
+  batch_size: 256
+  num_workers: 16
   shuffle: True
   drop_last: True
 
 Trainer:
   name: vat
   device: cuda
-  save_dir: first_try
-  max_epoch: 100
+  save_dir: svhn_first_try
+  max_epoch: 120
+  epoch_decay_start: 80
+  eps: 2.5
 

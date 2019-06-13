@@ -28,7 +28,8 @@ def _disable_tracking_bn_stats(model):
 def _l2_normalize(d):
     d_reshaped = d.view(d.shape[0], -1, *(1 for _ in range(d.dim() - 2)))
     d /= torch.norm(d_reshaped, dim=1, keepdim=True)  # + 1e-8
-    assert torch.allclose(d.view(d.shape[0], -1).norm(dim=1), torch.ones(d.shape[0]).to(d.device), rtol=1e-3)
+    assert torch.allclose(d.view(d.shape[0], -1).norm(dim=1), torch.ones(d.shape[0]).to(d.device),
+                          rtol=1e-3), f"Normalization wrong"
     return d
 
 
@@ -37,7 +38,7 @@ _kl_div = KL_div(reduce=True)
 
 class VATLoss(nn.Module):
 
-    def __init__(self, xi=10.0, eps=1.0, prop_eps=0.25, ip=1):
+    def __init__(self, xi=1e-6, eps=8, prop_eps=1, ip=1):
         """VAT loss
         :param xi: hyperparameter of VAT (default: 10.0)
         :param eps: hyperparameter of VAT (default: 1.0)
@@ -51,21 +52,19 @@ class VATLoss(nn.Module):
 
     def forward(self, model, x):
         with torch.no_grad():
-            pred = model(x)[0]
+            pred = model(x)[0]  # this is in train mode, as coded in vat_chainer repo
 
         # prepare random unit tensor
         d = torch.randn_like(x).to(x.device)
         d = _l2_normalize(d)
 
         with _disable_tracking_bn_stats(model):
-            # calc adversarial direction
             for _ in range(self.ip):
                 d.requires_grad_()
                 pred_hat = model(x + self.xi * d)[0]
                 adv_distance = _kl_div(pred_hat, pred)
                 adv_distance.backward()
                 d = _l2_normalize(d.grad)
-                model.zero_grad()
 
             # calc LDS
             r_adv = d * self.eps.view(-1, 1) * self.prop_eps if \

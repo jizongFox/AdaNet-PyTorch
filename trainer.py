@@ -33,6 +33,7 @@ class AdaNetTrainer(_Trainer):
                  val_loader: DataLoader,
                  max_epoch: int = 100,
                  grl_scheduler: CustomScheduler = None,
+                 epoch_decay_start: int = None,
                  save_dir: str = 'adanet',
                  checkpoint_path: str = None,
                  device='cpu',
@@ -46,11 +47,13 @@ class AdaNetTrainer(_Trainer):
         self.beta_distr: Beta = Beta(torch.tensor([1.0]), torch.tensor([1.0]))
         self.grl_scheduler = grl_scheduler
         self.grl_scheduler.epoch = self._start_epoch
+        self.epoch_decay_start = int(epoch_decay_start) if epoch_decay_start is not None else None
 
     def __init_meters__(self) -> List[str]:
         METER_CONFIG = {'tra_reg_total': AverageValueMeter(),
                         'tra_sup_label': AverageValueMeter(),
                         'tra_sup_mixup': AverageValueMeter(),
+                        'grl': AverageValueMeter(),
                         'tra_cls': AverageValueMeter(),
                         'tra_conf': ConfusionMatrix(num_classes=10),
                         'val_conf': ConfusionMatrix(num_classes=10)}
@@ -61,7 +64,8 @@ class AdaNetTrainer(_Trainer):
             'tra_sup_mixup_mean',
             'tra_cls_mean',
             'tra_conf_acc',
-            'val_conf_acc'
+            'val_conf_acc',
+            'grl_mean'
         ]
 
     @property
@@ -77,6 +81,15 @@ class AdaNetTrainer(_Trainer):
 
     def start_training(self):
         for epoch in range(self._start_epoch, self.max_epoch):
+
+            # copy as the original work
+            if self.epoch_decay_start:
+                if epoch > self.epoch_decay_start:
+                    decayed_lr = (self.max_epoch - epoch) * self.model.optim_dict['lr'] / (
+                            self.max_epoch - self.epoch_decay_start)
+                    self.model.optimizer.lr = decayed_lr
+                    self.model.optimizer.betas = (0.5, 0.999)
+
             self._train_loop(
                 labeled_loader=self.labeled_loader,
                 unlabeled_loader=self.unlabeled_loader,
@@ -164,6 +177,7 @@ class AdaNetTrainer(_Trainer):
         adv_loss = self.kl_criterion(cls, mix_indice)
         self.METERINTERFACE.tra_sup_mixup.add(reg_loss1.item())
         self.METERINTERFACE.tra_cls.add(adv_loss.item())
+        self.METERINTERFACE.grl.add(self.grl_scheduler.value)
 
         # Discriminator
         return reg_loss1 + adv_loss
@@ -190,12 +204,14 @@ class AdaNetTrainer(_Trainer):
 class VAT_Trainer(AdaNetTrainer):
 
     def __init__(self, model: Model, labeled_loader: DataLoader, unlabeled_loader: DataLoader, val_loader: DataLoader,
-                 max_epoch: int = 100, grl_scheduler=None, use_entropy: bool = True, save_dir: str = 'vat',
+                 max_epoch: int = 100, grl_scheduler=None, eps=2.5, epoch_decay_start: int = None, use_entropy: bool = True,
+                 save_dir: str = 'vat',
                  checkpoint_path: str = None,
                  device='cpu', config: dict = None, **kwargs) -> None:
-        super().__init__(model, labeled_loader, unlabeled_loader, val_loader, max_epoch, grl_scheduler, save_dir,
-                         checkpoint_path, device, config, **kwargs)
+        super().__init__(model, labeled_loader, unlabeled_loader, val_loader, max_epoch, grl_scheduler,
+                         epoch_decay_start, save_dir, checkpoint_path, device, config, **kwargs)
         self.use_entropy = use_entropy
+        self.eps = float(eps)
 
     def __init_meters__(self) -> List[str]:
         METER_CONFIG = {'tra_reg_total': AverageValueMeter(),
@@ -222,7 +238,7 @@ class VAT_Trainer(AdaNetTrainer):
                             'tra_acc': self.METERINTERFACE.tra_conf.summary()['acc']})
 
     def _trainer_specific_loss(self, label_img, label_gt, unlab_img, *args, **kwargs):
-        adversarial_loss, *_ = VATLoss(xi=1e-6, eps=10.0, prop_eps=1)(self.model.torchnet, unlab_img)
+        adversarial_loss, *_ = VATLoss(xi=1e-6, eps=self.eps, prop_eps=1)(self.model.torchnet, unlab_img)
         entropy = 0
         self.METERINTERFACE.tra_adv.add(adversarial_loss.item())
         if self.use_entropy:

@@ -6,3 +6,5 @@ runs/
 /.pytest_cache/
 /.pytype/
 /data/MNIST/
+archives/
+/data/

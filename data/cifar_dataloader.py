@@ -7,11 +7,14 @@
 __author__ = "Jizong Peng"
 from pathlib import Path
 from typing import Callable, Tuple
-from torch.utils.data import DataLoader
+
 import numpy as np
 import torch
-from torch.utils.data import Dataset
+from deepclustering.augment.augment import ToTensor
+from deepclustering.augment.tensor_augment import RandomHorizontalFlip, RandomCrop, Compose
 from deepclustering.dataset.classification.semi_helper import SemiDatasetInterface
+from torch.utils.data import DataLoader
+from torch.utils.data import Dataset
 
 
 class CIFAR10(Dataset):
@@ -70,14 +73,17 @@ class Cifar10SemiSupervisedDatasetInterface(SemiDatasetInterface):
     def __init__(
             self,
             is_validation: bool = False,
-            img_transformation: Callable = None,
+            tra_img_transformation: Callable = None,
+            val_img_transformation: Callable = None,
             target_transformation: Callable = None,
             verbose: bool = True,
             *args, **kwargs
     ) -> None:
-        super().__init__(CIFAR10, '', 4000, img_transformation, target_transformation, verbose,
+        super().__init__(CIFAR10, '', 4000, None, target_transformation, verbose,
                          *args, **kwargs)
         self.is_validation = is_validation
+        self.tra_img_transformation = tra_img_transformation
+        self.val_img_transformation = val_img_transformation
 
     def SemiSupervisedDataLoaders(
             self,
@@ -89,17 +95,17 @@ class Cifar10SemiSupervisedDatasetInterface(SemiDatasetInterface):
         _split = '_val' if self.is_validation else ''
         labeled_set = CIFAR10(
             split=f"label{_split}",
-            img_transform=self.img_transform,
+            img_transform=self.tra_img_transformation,
             target_transform=self.target_transform
         )
         unlabel_set = CIFAR10(
             split=f"unlabel{_split}",
-            img_transform=self.img_transform,
+            img_transform=self.tra_img_transformation,
             target_transform=self.target_transform
         )
         test_set = CIFAR10(
             split=f"test{_split}",
-            img_transform=self.img_transform,
+            img_transform=self.val_img_transformation,
             target_transform=self.target_transform
         )
         label_loader = DataLoader(
@@ -119,11 +125,28 @@ class Cifar10SemiSupervisedDatasetInterface(SemiDatasetInterface):
         test_loader = DataLoader(
             test_set,
             batch_size=batch_size,
-            shuffle=shuffle,
-            drop_last=drop_last,
+            shuffle=False,
+            drop_last=False,
             num_workers=num_workers
         )
         return label_loader, unlabel_loader, test_loader
 
     def _init_train_and_test_test(self, transform, target_transform, *args, **kwargs) -> Tuple[Dataset, Dataset]:
         pass
+
+
+default_cifar10_transformation = {
+    "train": Compose(
+        [
+            RandomHorizontalFlip(),
+            RandomCrop((32, 32), padding=(2, 2)),
+            ToTensor()
+        ]
+    ),
+    "val": Compose(
+        [
+            ToTensor()
+        ]
+    )
+
+}
