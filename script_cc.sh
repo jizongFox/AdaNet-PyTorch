@@ -5,6 +5,7 @@ wrapper(){
     module load python/3.6
     source $HOME/torchenv36/bin/activate
     module load scipy-stack
+    module load cmake
     echo ${command} > tmp.sh
     sed -i '1i\#!/bin/bash' tmp.sh
     sbatch  --job-name="${commend}" \
@@ -56,7 +57,7 @@ Trainer.eps=3.5 \
 Arch.top_bn=True \
 Trainer.use_entropy=False"
 \
-"python main.py Trainer.save_dir=semi-aug/cifar \
+"python main.py Trainer.save_dir=semi-aug-ent/cifar \
 DataLoader.name=cifar10 \
 DataLoader.aug=True \
 Trainer.max_epoch=500 \
@@ -64,7 +65,7 @@ Trainer.epoch_decay_start=460 \
 Trainer.eps=8.0 \
 Trainer.use_entropy=True"
 \
-"python main.py Trainer.save_dir=semi-aug/svhn \
+"python main.py Trainer.save_dir=semi-aug-ent/svhn \
 DataLoader.name=svhn \
 DataLoader.aug=True \
 Trainer.max_epoch=120 \
@@ -78,7 +79,7 @@ time=1
 
 for cmd in "${StringArray[@]}"
 do
-echo $cmd
+#echo $cmd
 #$cmd
-#wrapper "${time}" "${cmd}"
+wrapper "${time}" "${cmd}"
 done

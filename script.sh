@@ -36,7 +36,7 @@ Arch.top_bn=True \
 Trainer.use_entropy=False
 
 #Semi-supervised Learning with augmentation + entropy minimization
-python main.py Trainer.save_dir=semi-aug/cifar \
+python main.py Trainer.save_dir=semi-aug-ent/cifar \
 DataLoader.name=cifar10 \
 DataLoader.aug=True \
 Trainer.max_epoch=500 \
@@ -44,7 +44,7 @@ Trainer.epoch_decay_start=460 \
 Trainer.eps=8.0 \
 Trainer.use_entropy=True
 
-python main.py Trainer.save_dir=semi-aug/svhn \
+python main.py Trainer.save_dir=semi-aug-ent/svhn \
 DataLoader.name=svhn \
 DataLoader.aug=True \
 Trainer.max_epoch=120 \
