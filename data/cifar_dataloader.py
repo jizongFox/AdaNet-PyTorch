@@ -3,7 +3,8 @@
 #   file description
 #
 #
-
+__all__ = ['Cifar10SemiSupervisedDatasetInterface', 'CIFAR10', 'default_cifar10_transformation',
+           'default_cifar10_aug_transformation']
 __author__ = "Jizong Peng"
 from pathlib import Path
 from typing import Callable, Tuple
@@ -138,6 +139,19 @@ class Cifar10SemiSupervisedDatasetInterface(SemiDatasetInterface):
 default_cifar10_transformation = {
     "train": Compose(
         [
+            ToTensor()
+        ]
+    ),
+    "val": Compose(
+        [
+            ToTensor()
+        ]
+    )
+}
+
+default_cifar10_aug_transformation = {
+    "train": Compose(
+        [
             RandomHorizontalFlip(),
             RandomCrop((32, 32), padding=(2, 2)),
             ToTensor()
@@ -148,5 +162,4 @@ default_cifar10_transformation = {
             ToTensor()
         ]
     )
-
 }

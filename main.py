@@ -11,7 +11,10 @@ DEFAULT_CONFIG_PATH = 'config.yaml'
 config = ConfigManger(DEFAULT_CONFIG_PATH, verbose=True, integrality_check=False).merged_config
 model = Model(config.get('Arch'), config.get('Optim'), config.get('Scheduler'))
 
-label_loader, unlabel_loader, val_loader = get_dataloader(config['DataLoader'].get('name'), config.get('DataLoader'))
+label_loader, unlabel_loader, val_loader = get_dataloader(
+    config['DataLoader'].get('name'),
+    config['DataLoader'].get('aug', False),
+    config.get('DataLoader'))
 scheduler = CustomScheduler(max_epoch=config['Trainer']['max_epoch'])
 assert config['Trainer'].get('name') in ('vat', 'ada')
 
