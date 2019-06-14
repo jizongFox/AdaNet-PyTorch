@@ -204,7 +204,8 @@ class AdaNetTrainer(_Trainer):
 class VAT_Trainer(AdaNetTrainer):
 
     def __init__(self, model: Model, labeled_loader: DataLoader, unlabeled_loader: DataLoader, val_loader: DataLoader,
-                 max_epoch: int = 100, grl_scheduler=None, eps=2.5, epoch_decay_start: int = None, use_entropy: bool = True,
+                 max_epoch: int = 100, grl_scheduler=None, eps=2.5, epoch_decay_start: int = None,
+                 use_entropy: bool = True,
                  save_dir: str = 'vat',
                  checkpoint_path: str = None,
                  device='cpu', config: dict = None, **kwargs) -> None:

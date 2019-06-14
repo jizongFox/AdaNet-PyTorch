@@ -102,7 +102,7 @@ class SVHN(Dataset):
         super().__init__()
         assert split in (self.data_splits), f'arg `split` should be in \
         {", ".join(self.data_splits.keys())}, given {split}.'
-        data = np.load(str(Path(__file__).parent / 'cifar10ss' / f'seed{seed}' / self.data_splits[split]))
+        data = np.load(str(Path(__file__).parent / 'svhnss' / f'seed{seed}' / self.data_splits[split]))
         self.images: np.ndarray = data['images']
         self.images = self.images.reshape((self.images.shape[0], 3, 32, 32))
         self.target = data['labels']
