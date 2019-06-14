@@ -47,7 +47,7 @@ class AdaNetTrainer(_Trainer):
         self.beta_distr: Beta = Beta(torch.tensor([1.0]), torch.tensor([1.0]))
         self.grl_scheduler = grl_scheduler
         self.grl_scheduler.epoch = self._start_epoch
-        self.epoch_decay_start = int(epoch_decay_start) if epoch_decay_start is not None else None
+        self.epoch_decay_start = int(epoch_decay_start) if epoch_decay_start else None
 
     def __init_meters__(self) -> List[str]:
         METER_CONFIG = {'tra_reg_total': AverageValueMeter(),
@@ -156,7 +156,6 @@ class AdaNetTrainer(_Trainer):
             self.METERINTERFACE.val_conf.add(pred.max(1)[1], label)
             report_dict = self._eval_report_dict
             val_loader_.set_postfix(report_dict)
-
         print(f'Validating epoch {epoch}: {nice_dict(report_dict)}')
 
         return self.METERINTERFACE.val_conf.summary()['acc']

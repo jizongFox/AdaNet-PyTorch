@@ -13,7 +13,7 @@ class CustomScheduler(Scheduler):
         super().__init__()
         self.max_epoch = int(max_epoch)
         self.epoch = 0
-        self.lmd_func = lambda x: 1.0 * (2 / (1 + np.exp(-10 * x)) - 1)
+        self.lmd_func = lambda x: 1.0 * (2. / (1. + np.exp(-10 * x)) - 1.)
 
     @staticmethod
     def get_lr(function, epoch, max_epoch):

@@ -14,7 +14,7 @@ wrapper(){
      --cpus-per-task=6  \
      --mem=16000M \
      --time=0-${hour}:00 \
-     --account=rrg-mpederso \
+     --account=def-mpederso \
      --mail-user=jizong.peng.1@etsmtl.net \
      --mail-type=ALL   \
     ./tmp.sh
@@ -75,7 +75,7 @@ Arch.top_bn=True \
 Trainer.use_entropy=True"
 )
 
-time=1
+time=12
 
 for cmd in "${StringArray[@]}"
 do
