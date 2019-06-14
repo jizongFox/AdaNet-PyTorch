@@ -209,8 +209,7 @@ default_svhn_transformation = {
 default_svhn_aug_transformation = {
     "train": Compose(
         [
-            RandomHorizontalFlip(),
-            RandomCrop((32, 32), padding=(2, 2)),
+            RandomCrop((32, 32), padding=(2, 2, 2, 2)),
             ToTensor()
         ]
     ),
