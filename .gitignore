@@ -10,4 +10,4 @@ archives/
 /data/cifar10ss
 /data/MNIST
 /data/svhnss
-
+zzz*.py
