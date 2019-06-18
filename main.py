@@ -6,7 +6,7 @@ from data import get_dataloader
 from scheduler import CustomScheduler
 from trainer import AdaNetTrainer, VAT_Trainer
 
-_ = _register_arch  # to enable the registration
+_ = _register_arch  # to enable the network registration
 DEFAULT_CONFIG_PATH = 'config.yaml'
 config = ConfigManger(DEFAULT_CONFIG_PATH, verbose=True, integrality_check=False).merged_config
 model = Model(config.get('Arch'), config.get('Optim'), config.get('Scheduler'))
