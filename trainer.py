@@ -5,15 +5,16 @@
 #
 from pathlib import Path
 from typing import List
-
+from apex import amp
 import torch
 from deepclustering import ModelMode
 from deepclustering.loss import Entropy
 from deepclustering.loss import KL_div
 from deepclustering.meters import MeterInterface, AverageValueMeter, ConfusionMatrix
-from deepclustering.model import Model
+from deepclustering.model import Model, GradientBackwardStep
 from deepclustering.trainer import _Trainer
-from deepclustering.utils import DataIter, tqdm, tqdm_, class2one_hot, flatten_dict, nice_dict, simplex, dict_filter
+from deepclustering.utils import tqdm, tqdm_, class2one_hot, flatten_dict, nice_dict, simplex, dict_filter
+from deepclustering.dataset import DataIter
 from torch.distributions import Beta
 from torch.utils.data import DataLoader
 
@@ -138,9 +139,13 @@ class AdaNetTrainer(_Trainer):
 
             reg_loss = self._trainer_specific_loss(label_img, label_gt, unlabel_img)
             self.METERINTERFACE.tra_reg_total.add(reg_loss.item())
-            self.model.zero_grad()
-            (sup_loss + reg_loss).backward()
-            self.model.step()
+            # with GradientBackwardStep(sup_loss + reg_loss, self.model) as loss:
+            #     loss.backward()
+            with amp.scale_loss(sup_loss + reg_loss, self.model.optimizer) as scaled_loss:
+                scaled_loss.backward()
+            # self.model.zero_grad()
+            # (sup_loss + reg_loss).backward()
+            # self.model.step()
             report_dict = self._training_report_dict
             batch_num.set_postfix(report_dict)
         print(f'  Training epoch {epoch}: {nice_dict(report_dict)}')

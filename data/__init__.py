@@ -24,7 +24,7 @@ def get_dataloader(name: str = None, aug: bool = False, DataLoader_DICT: dict = 
         SemiDatasetHandler = SVHNSemiSupervisedDatasetInterface(
             tra_img_transformation=default_svhn_aug_transformation["train"] if aug else \
                 default_svhn_transformation['train'],
-            val_img_transformation=default_svhn_transformation['val'] if aug else \
+            val_img_transformation=default_svhn_aug_transformation['val'] if aug else \
                 default_svhn_transformation['val'],
             verbose=True
         )

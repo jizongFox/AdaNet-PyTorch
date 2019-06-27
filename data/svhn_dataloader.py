@@ -68,7 +68,7 @@ from typing import Callable, Tuple
 
 import numpy as np
 import torch
-from deepclustering.augment.augment import ToTensor
+from deepclustering.augment.pil_augment import ToTensor
 from deepclustering.augment.tensor_augment import RandomHorizontalFlip, RandomCrop, Compose
 from deepclustering.dataset.classification.semi_helper import SemiDatasetInterface
 from torch.utils.data import DataLoader

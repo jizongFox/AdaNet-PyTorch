@@ -1,5 +1,5 @@
 from deepclustering.manager import ConfigManger
-from deepclustering.model import Model
+from deepclustering.model import Model, to_Apex
 
 from arch import _register_arch
 from data import get_dataloader
@@ -10,6 +10,7 @@ _ = _register_arch  # to enable the network registration
 DEFAULT_CONFIG_PATH = 'config.yaml'
 config = ConfigManger(DEFAULT_CONFIG_PATH, verbose=True, integrality_check=False).merged_config
 model = Model(config.get('Arch'), config.get('Optim'), config.get('Scheduler'))
+model = to_Apex(model, opt_level='O1')
 
 label_loader, unlabel_loader, val_loader = get_dataloader(
     config['DataLoader'].get('name'),
