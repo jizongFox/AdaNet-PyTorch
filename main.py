@@ -7,8 +7,9 @@ from scheduler import CustomScheduler
 from trainer import AdaNetTrainer, VAT_Trainer
 
 _ = _register_arch  # to enable the network registration
+
 DEFAULT_CONFIG_PATH = 'config.yaml'
-config = ConfigManger(DEFAULT_CONFIG_PATH, verbose=True, integrality_check=False).merged_config
+config = ConfigManger(DEFAULT_CONFIG_PATH, verbose=True, integrality_check=False).config
 model = Model(config.get('Arch'), config.get('Optim'), config.get('Scheduler'))
 model = to_Apex(model, opt_level='O1')
 

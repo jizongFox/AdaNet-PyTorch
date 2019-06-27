@@ -6,6 +6,7 @@ Using `git submodule init` followed by `git submodule update` to add my personal
 Freshly new to tensorflow, I try to implement the paper based on the [original repo]('https://github.com/qinenergy/adanet').
 Details would not perfectly matched. 
 
+This codebase also serves as personal codebase for semi-supervised benchmark.
 
 Acknowledgement:  
 [Original authors](https://arxiv.org/abs/1905.08171), [repo](https://github.com/qinenergy/adanet)   
