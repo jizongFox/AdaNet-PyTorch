@@ -11,3 +11,4 @@ archives/
 /data/MNIST
 /data/svhnss
 zzz*.py
+data/SVHN/

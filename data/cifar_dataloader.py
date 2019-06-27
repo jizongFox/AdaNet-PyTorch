@@ -3,9 +3,13 @@
 #   file description
 #
 #
-__all__ = ['Cifar10SemiSupervisedDatasetInterface', 'CIFAR10', 'default_cifar10_transformation',
-           'default_cifar10_aug_transformation']
-__author__ = "Jizong Peng"
+__all__ = [
+    'Cifar10SemiSupervisedDatasetInterface',
+    'CIFAR10',
+    'default_cifar10_transformation',
+    'default_cifar10_aug_transformation'
+]
+
 from pathlib import Path
 from typing import Callable, Tuple
 

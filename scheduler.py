@@ -1,8 +1,4 @@
-#
-#
-#   This module is to implement the gradient inverse layer's weight scheduler
-#
-#
+
 import numpy as np
 from deepclustering.scheduler import Scheduler
 

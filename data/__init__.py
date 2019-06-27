@@ -14,10 +14,12 @@ def get_dataloader(name: str = None, aug: bool = False, DataLoader_DICT: dict = 
     if name == 'cifar10':
 
         SemiDatasetHandler = Cifar10SemiSupervisedDatasetInterface(
-            tra_img_transformation=default_cifar10_aug_transformation["train"] if aug else \
-                default_cifar10_transformation['train'],
-            val_img_transformation=default_cifar10_aug_transformation['val'] if aug else \
-                default_cifar10_transformation['val'],
+            tra_img_transformation=
+            default_cifar10_aug_transformation["train"] if aug else
+            default_cifar10_transformation['train'],
+            val_img_transformation=
+            default_cifar10_aug_transformation['val'] if aug else
+            default_cifar10_transformation['val'],
             verbose=True
         )
     else:
