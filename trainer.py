@@ -5,16 +5,17 @@
 #
 from pathlib import Path
 from typing import List
-from apex import amp
+
 import torch
 from deepclustering import ModelMode
+from deepclustering.dataset import DataIter
 from deepclustering.loss import Entropy
 from deepclustering.loss import KL_div
 from deepclustering.meters import MeterInterface, AverageValueMeter, ConfusionMatrix
-from deepclustering.model import Model, GradientBackwardStep
+from deepclustering.model import Model, ZeroGradientBackwardStep
 from deepclustering.trainer import _Trainer
-from deepclustering.utils import tqdm, tqdm_, class2one_hot, flatten_dict, nice_dict, simplex, dict_filter
-from deepclustering.dataset import DataIter
+from deepclustering.utils import tqdm, tqdm_, flatten_dict, nice_dict, simplex, dict_filter, one_hot, class2one_hot
+from torch import nn
 from torch.distributions import Beta
 from torch.utils.data import DataLoader
 
@@ -45,6 +46,7 @@ class AdaNetTrainer(_Trainer):
         self.labeled_loader = labeled_loader
         self.unlabeled_loader = unlabeled_loader
         self.kl_criterion = KL_div()
+        self.ce_loss = nn.CrossEntropyLoss()
         self.beta_distr: Beta = Beta(torch.tensor([1.0]), torch.tensor([1.0]))
         self.grl_scheduler = grl_scheduler
         self.grl_scheduler.epoch = self._start_epoch
@@ -102,11 +104,9 @@ class AdaNetTrainer(_Trainer):
             self.model.schedulerStep()
             self.grl_scheduler.step()
             # save meters and checkpoints
-            for k, v in self.METERINTERFACE.aggregated_meter_dict.items():
-                v.summary().to_csv(self.save_dir / f'meters/{k}.csv')
-            self.METERINTERFACE.summary().to_csv(self.save_dir / self.wholemeter_filename)
-            self.writer.add_scalars('Scalars', self.METERINTERFACE.summary().iloc[-1].to_dict(), global_step=epoch)
-            self.drawer.call_draw()
+            Summary = self.METERINTERFACE.summary()
+            Summary.to_csv(self.save_dir / self.wholemeter_filename)
+            self.drawer.draw(Summary)
             self.model.torchnet.lambd = self.grl_scheduler.value
             self.save_checkpoint(self.state_dict, epoch, current_score)
 
@@ -133,19 +133,14 @@ class AdaNetTrainer(_Trainer):
 
             label_pred, _ = self.model(label_img)
             self.METERINTERFACE.tra_conf.add(label_pred.max(1)[1], label_gt)
-            sup_loss = self.kl_criterion(label_pred,
-                                         class2one_hot(label_gt.unsqueeze(1).unsqueeze(1), 10).squeeze().float())
+            sup_loss = self.ce_loss(label_pred, label_gt.squeeze())
             self.METERINTERFACE.tra_sup_label.add(sup_loss.item())
 
             reg_loss = self._trainer_specific_loss(label_img, label_gt, unlabel_img)
+            # reg_loss = torch.Tensor([0]).to(self.device)
             self.METERINTERFACE.tra_reg_total.add(reg_loss.item())
-            # with GradientBackwardStep(sup_loss + reg_loss, self.model) as loss:
-            #     loss.backward()
-            with amp.scale_loss(sup_loss + reg_loss, self.model.optimizer) as scaled_loss:
-                scaled_loss.backward()
-            # self.model.zero_grad()
-            # (sup_loss + reg_loss).backward()
-            # self.model.step()
+            with ZeroGradientBackwardStep(sup_loss + reg_loss, self.model) as loss:
+                loss.backward()
             report_dict = self._training_report_dict
             batch_num.set_postfix(report_dict)
         print(f'  Training epoch {epoch}: {nice_dict(report_dict)}')
@@ -173,7 +168,12 @@ class AdaNetTrainer(_Trainer):
         with torch.no_grad():
             pseudo_label = self.model.torchnet(unlab_img)[0]
         self.model.train()
-        mixup_img, mixup_label, mix_indice = self._mixup(label_img, label_gt, unlab_img, pseudo_label)
+        mixup_img, mixup_label, mix_indice = self._mixup(
+            label_img,
+            class2one_hot(label_gt.unsqueeze(dim=1).unsqueeze(dim=2), 10).squeeze().float(),
+            unlab_img,
+            pseudo_label
+        )
 
         pred, cls = self.model(mixup_img)
         assert simplex(pred) and simplex(cls)
@@ -184,21 +184,25 @@ class AdaNetTrainer(_Trainer):
         self.METERINTERFACE.grl.add(self.grl_scheduler.value)
 
         # Discriminator
-        return reg_loss1 + adv_loss
+        return (reg_loss1 + adv_loss)*0.1
 
-    def _mixup(self, label_img, label_gt, unlab_img, pseudo_label):
+    def _mixup(self, label_img: torch.Tensor, label_onehot: torch.Tensor, unlab_img: torch.Tensor,
+               unlabeled_pred: torch.Tensor):
+        assert label_img.shape == unlab_img.shape
+        assert label_img.shape.__len__() == 4
+        assert one_hot(label_onehot) and simplex(unlabeled_pred)
+        assert label_onehot.shape == unlabeled_pred.shape
         bn, *shape = label_img.shape
         alpha = self.beta_distr.sample((bn,)).squeeze(1).to(self.device)
         _alpha = alpha.view(bn, 1, 1, 1).repeat(1, *shape)
         assert _alpha.shape == label_img.shape
         mixup_img = label_img * _alpha + unlab_img * (1 - _alpha)
-        mixup_label = class2one_hot(label_gt.unsqueeze(dim=1).unsqueeze(dim=2),
-                                    C=self.model.arch_dict['num_classes']).squeeze().float() * alpha.view(bn, 1) \
-                      + pseudo_label * (1 - alpha).view(bn, 1)
+        mixup_label = label_onehot * alpha.view(bn, 1) \
+                      + unlabeled_pred * (1 - alpha).view(bn, 1)
         mixup_index = torch.stack([alpha, 1 - alpha], dim=1).to(self.device)
 
         assert mixup_img.shape == label_img.shape
-        assert mixup_label.shape == pseudo_label.shape
+        assert mixup_label.shape == label_onehot.shape
         assert mixup_index.shape[0] == bn
         assert simplex(mixup_index)
 

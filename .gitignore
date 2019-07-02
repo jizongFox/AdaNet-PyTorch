@@ -12,3 +12,4 @@ archives/
 /data/svhnss
 zzz*.py
 data/SVHN/
+/.mypy_cache/
