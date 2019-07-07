@@ -20,7 +20,7 @@ label_loader, unlabel_loader, val_loader = get_dataloader(
 scheduler = CustomScheduler(max_epoch=config['Trainer']['max_epoch'])
 assert config['Trainer'].get('name') in ('vat', 'ada')
 
-Trainer = VAT_Trainer if config['Trainer']['name'] == 'vat' else AdaNetTrainer
+Trainer = VAT_Trainer if config['Trainer']['name'].lower() == 'vat' else AdaNetTrainer
 trainer = Trainer(
     model=model,
     labeled_loader=label_loader,

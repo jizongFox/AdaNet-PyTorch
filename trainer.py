@@ -5,16 +5,16 @@
 #
 from pathlib import Path
 from typing import List
-from apex import amp
+
 import torch
 from deepclustering import ModelMode
+from deepclustering.dataset import DataIter
 from deepclustering.loss import Entropy
 from deepclustering.loss import KL_div
 from deepclustering.meters import MeterInterface, AverageValueMeter, ConfusionMatrix
-from deepclustering.model import Model, GradientBackwardStep
+from deepclustering.model import Model, ZeroGradientBackwardStep
 from deepclustering.trainer import _Trainer
 from deepclustering.utils import tqdm, tqdm_, class2one_hot, flatten_dict, nice_dict, simplex, dict_filter
-from deepclustering.dataset import DataIter
 from torch.distributions import Beta
 from torch.utils.data import DataLoader
 
@@ -106,7 +106,7 @@ class AdaNetTrainer(_Trainer):
                 v.summary().to_csv(self.save_dir / f'meters/{k}.csv')
             self.METERINTERFACE.summary().to_csv(self.save_dir / self.wholemeter_filename)
             self.writer.add_scalars('Scalars', self.METERINTERFACE.summary().iloc[-1].to_dict(), global_step=epoch)
-            self.drawer.call_draw()
+            self.drawer.draw(self.METERINTERFACE.summary())
             self.model.torchnet.lambd = self.grl_scheduler.value
             self.save_checkpoint(self.state_dict, epoch, current_score)
 
@@ -139,13 +139,8 @@ class AdaNetTrainer(_Trainer):
 
             reg_loss = self._trainer_specific_loss(label_img, label_gt, unlabel_img)
             self.METERINTERFACE.tra_reg_total.add(reg_loss.item())
-            # with GradientBackwardStep(sup_loss + reg_loss, self.model) as loss:
-            #     loss.backward()
-            with amp.scale_loss(sup_loss + reg_loss, self.model.optimizer) as scaled_loss:
-                scaled_loss.backward()
-            # self.model.zero_grad()
-            # (sup_loss + reg_loss).backward()
-            # self.model.step()
+            with ZeroGradientBackwardStep(sup_loss + reg_loss, self.model) as loss:
+                loss.backward()
             report_dict = self._training_report_dict
             batch_num.set_postfix(report_dict)
         print(f'  Training epoch {epoch}: {nice_dict(report_dict)}')
